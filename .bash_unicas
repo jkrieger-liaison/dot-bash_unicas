@@ -1,0 +1,123 @@
+#1. reset the UNICAS_REPO variable to your unicas directory and your done.  
+#2. source this file inside of your .bash_profile and make sure .bash_profile is sourced automatically in your terminal
+
+#If you did all this correctly, the help documentation will display the next time your terminal runs.  
+#Any changes you make from then on can be loaded in by typing 'rProfile' (sans single quotes) in your terminal.
+
+#Contact Jacob Krieger for support
+
+
+#Update this path to point to your local unicas directory
+export UNICAS_REPO=/Users/jacobkrieger/git_repos/unicas
+
+#comment out this line to stop printing the help info on console load
+bashUnicasHelp
+
+function bashUnicasHelp() {
+  echo Help file located in .unicas_bash:
+  echo
+  echo bash_profile:
+  echo   rProfile         - Shorthand for reload profile.  runs command: source ~/.bash_profile
+  echo
+  echo Building Unicas:
+  echo   setDBProps       - Prompts for your eco internal hostname, sets 3 properties files
+  echo   buildApplicant   - Efficiently builds the application to deploy applicant portal and management portal
+  echo   revertProps      - Reverts properties files to branch HEAD.  Saves copies prior to reversion to root of unicas.
+}
+
+#.bash_profile aliases
+#reload profile
+alias rProfile='source ~/.bash_profile'
+
+#maven aliases.
+alias mi='mvn install'
+alias mci='mvn clean install'
+alias mcis='mvn clean install -DskipTests -Dmaven.test.skip=true'
+
+function buildApplicant() {
+  #1. replace the build command with build-dev to skip the uglify-html target which takes 3 minutes to run.
+ #sed -i '' 's/run-script build/run-script build-dev/g' ~/git_repos/unicas/liaison-parent/pom.xml
+  #2a. from unicas, build the beans projects skipping tests
+  mvn clean install -DskipTests -f $UNICAS_REPO/pom.xml
+  #2b. from unicas, remaining applicant profile projects skipping compiling and running tests.
+  mcis -f $UNICAS_REPO/unicas-ws/pom.xml
+  mcis -f $UNICAS_REPO/unicas-commonservices/pom.xml
+  mcis -f $UNICAS_REPO/unicas-configuration-ws/pom.xml
+  #3 fastbuild applicant UI
+  applicantUIFastbuild
+  #4. build management-ui
+  mcis -f $UNICAS_REPO/management-ui/pom.xml
+  #play a little tune
+  afplay -t 4 /Users/jacobkrieger/Music/Music/ukelele_boosted.aac
+}
+
+function applicantUIFastbuild() {
+  #comment out targets that slow down building a obfuscate debugging
+  #sed -i '' 's|(\"build-tmplt-html\",|(\"foo1\",|' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|\"uglify:vendor\",|//\"uglify:vendor\",|g' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|\"uglify:app\",|//\"uglify:app\",|g' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|\"build-tmplt-html\",|\"dev-tmplt-html\", //replaceme|' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  sed -i '' 's|grunt build\"|grunt build-dev\"|' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/package.json
+  mcis -f $UNICAS_REPO/applicant-ui/applicant-ux-web/pom.xml
+  sed -i '' 's|grunt build-dev\"|grunt build\"|' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/package.json
+  #sed -i '' 's|//\"uglify:vendor\",|\"uglify:vendor\",|g' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|//\"uglify:app",|\"uglify:app\",|g' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|\"dev-tmplt-html\", //replaceme|\"build-tmplt-html\",|g' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+  #sed -i '' 's|(\"foo1\",|(\"build-tmplt-html\",|' $UNICAS_REPO/applicant-ui/applicant-ux-web/yo/Gruntfile.js
+
+}
+
+function setDBProps() {
+  #prompt and read in jdbc host
+  echo Enter eco hostname \(eg. internal-econame.litest.io \):
+  read hostname
+  setQueueProps $hostname
+  setMemcacheProps $hostname
+  #replace jdbc.url hostname in unicas-ws.properties, unicas-configuration-ws.properties
+  sed -i '' "s/311sqlcasqa01.liaison-intl.com:1505/$hostname:1433/g" $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  sed -i '' "s/311sqlcasqa01.liaison-intl.com:1505/$hostname:1433/g" $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  #we'll also set the elasticsearch values to ecosystem values so program search and updates work
+  sed -i '' "s/10.10.12.225/$hostname/g" $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+  sed -i '' "s/10.10.12.225/$hostname/g" $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  #configuration-ws-facade
+  #hack to keep the change idempotent(ish)
+  sed -i '' "s/programInfo = program_search/programInfo = program/g" $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  sed -i '' "s/elasticsearch.index.programInfo = program/elasticsearch.index.programInfo = program_search/g" $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  #applicant ui
+  
+  sed -i '' "s/program_qa5/program_search/g" $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+  sed -i '' "s/highschool_qa5/highschool_search/g" $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+  echo Verify changes:
+  sleep 3
+  git diff $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  git diff $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  git diff $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+}
+
+function setMemcacheProps() {
+  echo setting memcache hostname to $1
+  sed -i '' "s/10.10.12.168/$1/" $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  sed -i '' "s/10.10.12.168/$1/" $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  sed -i '' "s/10.10.12.168/$1/" $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+}
+
+function setQueueProps() {
+  sed -i '' 's|AMQP.server.host=localhost|AMQP.server.host='$1'|' $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  sed -i '' 's|AMQP_GPA_QUEUE_OUTBOUND_NAME = liasoncas-gpa-outbound|AMQP_GPA_QUEUE_OUTBOUND_NAME = unicas-gpa-outbound|' $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  sed -i '' 's|AMQP_GPA_QUEUE_INBOUND_NAME = liaisoncas-gpa-inbound|AMQP_GPA_QUEUE_INBOUND_NAME = unicas-gpa-inbound|' $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+}
+
+function revertProps() {
+  #save temporary properties in case of accidents
+  echo reverting unicas-configuration-ws.properties
+  cp $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties $UNICAS_REPO
+  git checkout $UNICAS_REPO/unicas-configuration-ws/unicas-configuration-ws-facade/src/main/webapp/WEB-INF/unicas-configuration-ws.properties
+  
+  echo reverting unicas-ws.properties
+  cp $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties $UNICAS_REPO
+  git checkout $UNICAS_REPO/unicas-ws/unicas-ws-facade/src/main/webapp/WEB-INF/unicas-ws.properties
+  
+  echo reverting cas-web.properties
+  cp $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties $UNICAS_REPO
+  git checkout $UNICAS_REPO/applicant-ui/applicant-ux-web/src/main/webapp/WEB-INF/cas-web.properties
+}
