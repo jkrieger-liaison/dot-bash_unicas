@@ -1,0 +1,48 @@
+#Functions for keeping track of git tickets by branch.
+#Allows referring to tickets by their variable number eg. echo $ticket0 && echo $ticket1
+
+tickets=()
+
+addTicket() {
+  export ticket${#tickets[*]}=$1
+  echo Adding ticket${#tickets[*]}=$1
+  tickets[${#tickets[*]}]=$1
+}
+
+editTickets() {
+	vim ~/.profile_tickets
+}
+
+echoTickets() {
+  count=0
+  for item in ${tickets[*]}
+  do
+    printf "  %s: %s\n" ticket$count $item
+    count=$((count+1))
+  done
+}
+
+saveTickets() {
+	echo Saving Tickets...
+	echoTickets > ~/.profile_tickets
+	sed -i '.bak' -E 's| +ticket[0-9]+: +||g' ~/.profile_tickets
+}
+
+loadTickets() {
+	echo Loading Tickets...	
+	tickets=()
+	while read LINE
+    		do addTicket "$LINE"
+	done < ~/.profile_tickets
+}
+
+removeTicket() {
+	saveTickets
+	sed -i '.bak' -E "s|^$1$||g" ~/.profile_tickets
+	tr '\n' '`' < ~/.profile_tickets > ~/.profile_tickets.bak
+	sed -i ".bak" "s|\`\{2,\}|\`|g" ~/.profile_tickets.bak
+	sed -i ".bak" "s|^\`||" ~/.profile_tickets.bak
+	sed -i ".bak" "s|\`$||" ~/.profile_tickets.bak
+	tr '`' '\n' < ~/.profile_tickets.bak > ~/.profile_tickets
+        loadTickets	
+}
